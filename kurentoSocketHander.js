@@ -1,6 +1,7 @@
 module.exports = function (io, streams, app) {
     let minimist = require("minimist");
     let idTypeAdvisory = "5b6c63d7370072f452d6f13a";
+    let linkVideo = "";
     let doctors = {};
     let argv = minimist(process.argv.slice(2), {
         default: {
@@ -219,6 +220,7 @@ module.exports = function (io, streams, app) {
     const PaymentController = require('./controller/PaymentsHistoryController');
     const NotificationController = require('./controller/NotificationController');
     const SendNotification = require('./controller/NotificationFCMController');
+    const VideoCall = require('./controller/VideoCallHistoryController');
     async function stop(sessionId) {
         if (!pipelines[sessionId]) {
             return;
@@ -377,6 +379,19 @@ module.exports = function (io, streams, app) {
                     await SendNotification.sendNotification(idDoctor, notificationToDoctor);
                 }
             }
+            //// end doctor
+            /// create video call history
+            let objDataVideoCall = {
+                patientId: idPatient,
+                doctorId: idDoctor,
+                timeStart: finalStartTime,
+                timeEnd: new Date().getTime(),
+                typeAdvisoryID: objTypeAdvisory.id,
+                paymentPatientID: objPaymentPatientReturn.id,
+                paymentDoctorID: objPaymentDoctorReturn.id,
+                linkVideo: linkVideo
+            }
+            let objVideoCall = await VideoCall.createVideoCallHistory(objDataVideoCall)
         }
 
         clearCandidatesQueue(sessionId);

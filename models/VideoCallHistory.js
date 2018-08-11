@@ -8,6 +8,7 @@ let videoCallHistorySchema = mongoose.Schema({
     typeAdvisoryID: {type: String, ref: 'TypeAdvisories'},
     paymentPatientID: {type: String, ref: 'PaymentsHistory'},
     paymentDoctorID: {type: String, ref: 'PaymentsHistory'},
+    linkVideo: {type: String},
     deletionFlag: {type: Number, default: 1}
 }, {timestamps: true});
 
