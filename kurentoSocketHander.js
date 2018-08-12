@@ -1,5 +1,6 @@
 module.exports = function (io, streams, app) {
     let minimist = require("minimist");
+    const uuidv4 = require('uuid/v4');
     let idTypeAdvisory = "5b6c63d7370072f452d6f13a";
     let linkVideo = "";
     let doctors = {};
@@ -9,13 +10,11 @@ module.exports = function (io, streams, app) {
             ws_uri: "ws://103.221.220.186:8888/kurento"
         }
     });
-    // let Friend = require('./model/friend');
-
-    let kurento = require("kurento-client");
 
     /*
    * Definition of global variables.
    */
+    let kurento = require("kurento-client");
 
     let kurentoClient = null;
     let userRegistry = new UserRegistry();
@@ -37,6 +36,7 @@ module.exports = function (io, streams, app) {
         this.startTime = null;
         this.endTime = null;
         this.type = type;
+        this.recorderEndpoint = null;
     }
 
     UserSession.prototype.sendMessage = function (event, message) {
@@ -88,6 +88,10 @@ module.exports = function (io, streams, app) {
         callback
     ) {
         let self = this;
+        recordParams = {
+            uri: "file:///tmp/" + uuidv4() + ".mp4",
+            mediaProfile:'MP4'
+        };
         getKurentoClient(function (error, kurentoClient) {
             if (error) {
                 return callback(error);
@@ -97,83 +101,98 @@ module.exports = function (io, streams, app) {
                 if (error) {
                     return callback(error);
                 }
-
-                pipeline.create("WebRtcEndpoint", function (
-                    error,
-                    callerWebRtcEndpoint
-                ) {
+                pipeline.create("RecorderEndpoint", recordParams, function (error, recorderEndpoint) {
                     if (error) {
-                        pipeline.release();
                         return callback(error);
                     }
 
-                    if (candidatesQueue[callerId]) {
-                        while (candidatesQueue[callerId].length) {
-                            let candidate = candidatesQueue[callerId].shift();
-                            callerWebRtcEndpoint.addIceCandidate(candidate);
-                        }
-                    }
-
-                    callerWebRtcEndpoint.on("OnIceCandidate", function (event) {
-                        let candidate = kurento.getComplexType("IceCandidate")(
-                            event.candidate
-                        );
-                        userRegistry.getById(callerId).sendMessage("iceCandidate", {
-                            id: "iceCandidate",
-                            candidate: candidate
-                        });
-                    });
+                    // recorderEndpoint.record();
 
                     pipeline.create("WebRtcEndpoint", function (
                         error,
-                        calleeWebRtcEndpoint
+                        callerWebRtcEndpoint
                     ) {
                         if (error) {
                             pipeline.release();
                             return callback(error);
                         }
 
-                        if (candidatesQueue[calleeId]) {
-                            while (candidatesQueue[calleeId].length) {
-                                let candidate = candidatesQueue[calleeId].shift();
-                                calleeWebRtcEndpoint.addIceCandidate(candidate);
+                        if (candidatesQueue[callerId]) {
+                            while (candidatesQueue[callerId].length) {
+                                let candidate = candidatesQueue[callerId].shift();
+                                callerWebRtcEndpoint.addIceCandidate(candidate);
                             }
                         }
 
-                        calleeWebRtcEndpoint.on("OnIceCandidate", function (event) {
+                        callerWebRtcEndpoint.on("OnIceCandidate", function (event) {
                             let candidate = kurento.getComplexType("IceCandidate")(
                                 event.candidate
                             );
-                            userRegistry.getById(calleeId).sendMessage("iceCandidate", {
+                            userRegistry.getById(callerId).sendMessage("iceCandidate", {
                                 id: "iceCandidate",
                                 candidate: candidate
                             });
                         });
 
-                        callerWebRtcEndpoint.connect(
-                            calleeWebRtcEndpoint,
-                            function (error) {
-                                if (error) {
-                                    pipeline.release();
-                                    return callback(error);
-                                }
-
-                                calleeWebRtcEndpoint.connect(
-                                    callerWebRtcEndpoint,
-                                    function (error) {
-                                        if (error) {
-                                            pipeline.release();
-                                            return callback(error);
-                                        }
-                                    }
-                                );
-
-                                self.pipeline = pipeline;
-                                self.webRtcEndpoint[callerId] = callerWebRtcEndpoint;
-                                self.webRtcEndpoint[calleeId] = calleeWebRtcEndpoint;
-                                callback(null);
+                        pipeline.create("WebRtcEndpoint", function (
+                            error,
+                            calleeWebRtcEndpoint
+                        ) {
+                            if (error) {
+                                pipeline.release();
+                                return callback(error);
                             }
-                        );
+
+                            if (candidatesQueue[calleeId]) {
+                                while (candidatesQueue[calleeId].length) {
+                                    let candidate = candidatesQueue[calleeId].shift();
+                                    calleeWebRtcEndpoint.addIceCandidate(candidate);
+                                }
+                            }
+
+                            calleeWebRtcEndpoint.on("OnIceCandidate", function (event) {
+                                let candidate = kurento.getComplexType("IceCandidate")(
+                                    event.candidate
+                                );
+                                userRegistry.getById(calleeId).sendMessage("iceCandidate", {
+                                    id: "iceCandidate",
+                                    candidate: candidate
+                                });
+                            });
+
+                            callerWebRtcEndpoint.connect(
+                                calleeWebRtcEndpoint,
+                                function (error) {
+                                    if (error) {
+                                        pipeline.release();
+                                        return callback(error);
+                                    }
+                                    calleeWebRtcEndpoint.connect(
+                                        callerWebRtcEndpoint,
+                                        function (error) {
+                                            if (error) {
+                                                pipeline.release();
+                                                return callback(error);
+                                            }
+
+                                            calleeWebRtcEndpoint.connect(recorderEndpoint, function (error) {
+                                                if (error) {
+                                                    pipeline.release();
+                                                    return callback(error);
+                                                }
+                                                userRegistry.getById(callerId).recorderEndpoint = recorderEndpoint;
+                                                recorderEndpoint.record(); //You are alredy invoking recorderEndpoit.record() above.
+                                            });
+                                        }
+                                    );
+
+                                    self.pipeline = pipeline;
+                                    self.webRtcEndpoint[callerId] = callerWebRtcEndpoint;
+                                    self.webRtcEndpoint[calleeId] = calleeWebRtcEndpoint;
+                                    callback(null);
+                                }
+                            );
+                        });
                     });
                 });
             });
@@ -214,26 +233,35 @@ module.exports = function (io, streams, app) {
             callback(null, kurentoClient);
         });
     }
-    const TypeAdvisory = require('../models').TypeAdvisory;
-    const User = require('../models').User;
-    const constants = require('./constants');
-    const PaymentController = require('./controller/PaymentsHistoryController');
-    const NotificationController = require('./controller/NotificationController');
-    const SendNotification = require('./controller/NotificationFCMController');
-    const VideoCall = require('./controller/VideoCallHistoryController');
+
+    // const TypeAdvisory = require('./models').TypeAdvisory;
+    // const User = require('./models').User;
+    // const constants = require('./constants');
+    // const PaymentController = require('./controller/PaymentsHistoryController');
+    // const NotificationController = require('./controller/NotificationController');
+    // const SendNotification = require('./controller/NotificationFCMController');
+    // const VideoCall = require('./controller/VideoCallHistoryController');
+
     async function stop(sessionId) {
         if (!pipelines[sessionId]) {
             return;
         }
-
-        let pipeline = pipelines[sessionId];
-        delete pipelines[sessionId];
-        pipeline.release();
         let stopperUser = userRegistry.getById(sessionId);
         let stoppedUser = userRegistry.getByUserId(stopperUser.peer);
         stopperUser.peer = null;
-        console.log(stopperUser);
-        console.log(stoppedUser);
+        if (stoppedUser && stoppedUser.recorderEndpoint) {
+            stoppedUser.recorderEndpoint.stop();
+            stoppedUser.recorderEndpoint.release();
+            stoppedUser.recorderEndpoint = null;
+        }
+        if (stopperUser && stopperUser.recorderEndpoint) {
+            stopperUser.recorderEndpoint.stop();
+            stopperUser.recorderEndpoint.release();
+            stopperUser.recorderEndpoint = null;
+        }
+        let pipeline = pipelines[sessionId];
+        delete pipelines[sessionId];
+        pipeline.release();
 
 
         if (stoppedUser) {
@@ -245,6 +273,8 @@ module.exports = function (io, streams, app) {
             };
             stoppedUser.sendMessage("stopCommunication", message);
         }
+        clearCandidatesQueue(sessionId);
+        /*
         ////// Todo: create payment for patient and doctor, notification
         // get price of video call
 
@@ -310,7 +340,7 @@ module.exports = function (io, streams, app) {
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                    "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyPatient
+                        "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyPatient
                 };
                 await NotificationController.createNotification(objNotificationPatient)
 
@@ -323,7 +353,7 @@ module.exports = function (io, streams, app) {
                         type: constants.NOTIFICATION_TYPE_PAYMENT,
                         storageId: objPaymentPatientReturn.id,
                         message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                        "Thời gian tư vấn là: "+(timeCall/1000)+". Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyPatient,
+                            "Thời gian tư vấn là: "+(timeCall/1000)+". Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyPatient,
                         createTime: Date.now().toString()
                     }
                 };
@@ -359,7 +389,7 @@ module.exports = function (io, streams, app) {
                         type: constants.NOTIFICATION_TYPE_PAYMENT,
                         storageId: objPaymentDoctorReturn.id,
                         message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                        "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyDoctor
+                            "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyDoctor
                     };
                     await NotificationController.createNotification(objNotificationDoctor)
 
@@ -372,7 +402,7 @@ module.exports = function (io, streams, app) {
                             type: constants.NOTIFICATION_TYPE_PAYMENT,
                             storageId: objPaymentDoctorReturn.id,
                             message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                            "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyDoctor,
+                                "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyDoctor,
                             createTime: Date.now().toString()
                         }
                     };
@@ -393,8 +423,7 @@ module.exports = function (io, streams, app) {
             }
             let objVideoCall = await VideoCall.createVideoCallHistory(objDataVideoCall)
         }
-
-        clearCandidatesQueue(sessionId);
+        */
     }
 
     function incomingCallResponse(calleeId, from, callResponse, calleeSdp) {
@@ -545,7 +574,9 @@ module.exports = function (io, streams, app) {
     function onIceCandidate(sessionId, _candidate) {
         let candidate = kurento.getComplexType("IceCandidate")(_candidate);
         let user = userRegistry.getById(sessionId);
-
+        if (!user) {
+            return;
+        }
         if (
             pipelines[user.id] &&
             pipelines[user.id].webRtcEndpoint &&
@@ -570,6 +601,7 @@ module.exports = function (io, streams, app) {
         client.on("register", function (message) {
             if (message && message.type === 2) {
                 doctors[sessionId] = message.userId;
+                io.emit('getDoctorOnline', doctors);
             }
             register(sessionId, message.userId, message.name, message.avatar, message.type);
         });
@@ -605,7 +637,6 @@ module.exports = function (io, streams, app) {
         });
 
         client.on("onCallerReject", function (calleeId) {
-            console.log(calleeId);
             onCallerReject(calleeId);
         });
 
@@ -613,6 +644,7 @@ module.exports = function (io, streams, app) {
             console.log("-- " + client.id + " left --");
             if (doctors && doctors.hasOwnProperty(client.id)) {
                 delete doctors[client.id];
+                io.emit('getDoctorOnline', doctors);
             }
             stop(sessionId);
             userRegistry.unregister(client.id);
