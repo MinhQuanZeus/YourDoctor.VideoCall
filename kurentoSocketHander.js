@@ -1,3 +1,11 @@
+const TypeAdvisory = require('./models').TypeAdvisory;
+const User = require('./models').User;
+const constants = require('./constants');
+const PaymentController = require('./controller/PaymentsHistoryController');
+const NotificationController = require('./controller/NotificationController');
+const SendNotification = require('./controller/NotificationFCMController');
+const VideoCall = require('./controller/VideoCallHistoryController');
+
 module.exports = function (io, streams, app) {
     let minimist = require("minimist");
     const uuidv4 = require('uuid/v4');
@@ -90,7 +98,7 @@ module.exports = function (io, streams, app) {
         let self = this;
         recordParams = {
             uri: "file:///tmp/" + uuidv4() + ".mp4",
-            mediaProfile:'MP4'
+            mediaProfile: 'MP4'
         };
         getKurentoClient(function (error, kurentoClient) {
             if (error) {
@@ -234,13 +242,6 @@ module.exports = function (io, streams, app) {
         });
     }
 
-    // const TypeAdvisory = require('./models').TypeAdvisory;
-    // const User = require('./models').User;
-    // const constants = require('./constants');
-    // const PaymentController = require('./controller/PaymentsHistoryController');
-    // const NotificationController = require('./controller/NotificationController');
-    // const SendNotification = require('./controller/NotificationFCMController');
-    // const VideoCall = require('./controller/VideoCallHistoryController');
 
     async function stop(sessionId) {
         if (!pipelines[sessionId]) {
@@ -274,7 +275,7 @@ module.exports = function (io, streams, app) {
             stoppedUser.sendMessage("stopCommunication", message);
         }
         clearCandidatesQueue(sessionId);
-        /*
+
         ////// Todo: create payment for patient and doctor, notification
         // get price of video call
 
@@ -282,37 +283,43 @@ module.exports = function (io, streams, app) {
         //// get Id
         let idPatient;
         let idDoctor;
-        if(stopperUser && stopperUser.type=== 1){
-            idPatient = stopperUser.userID;
+        console.log(stopperUser);
+        console.log(stoppedUser);
+        if (stopperUser && stopperUser.type === 1) {
+            idPatient = stopperUser.userId;
         }
-        else if(stopperUser) {
-            idDoctor = stopperUser.userID;
+        else if (stopperUser) {
+            idDoctor = stopperUser.userId;
         }
-        if(stoppedUser && stoppedUser.type=== 1){
-            idPatient = stopperUser.userID;
+        if (stoppedUser && stoppedUser.type === 1) {
+            idPatient = stoppedUser.userId;
         }
-        else if(stoppedUser){
-            idDoctor = stopperUser.userID;
+        else if (stoppedUser) {
+            idDoctor = stoppedUser.userId;
         }
+        let fullNamePatient = userRegistry.getByUserId(idPatient).name;
+        let fullNameDoctor = userRegistry.getByUserId(idDoctor).name;
+
 
         // get time
         let stopperStartTime = stopperUser.startTime;
         let stoppedStartTime = stoppedUser.startTime;
         let finalStartTime;
-        if(stopperStartTime < stoppedStartTime){
+        if (stopperStartTime < stoppedStartTime) {
             finalStartTime = stoppedStartTime;
-        }else {
+        } else {
             finalStartTime = stopperStartTime;
         }
         // tính tiền
         let timeCall = new Date().getTime() - finalStartTime;
-        let objTypeAdvisory = await TypeAdvisory.findById({_id:idTypeAdvisory});
-        let amount = (timeCall/1000)*objTypeAdvisory.price;
+        let objTypeAdvisory = await TypeAdvisory.findById({_id: idTypeAdvisory});
+        let amount = (timeCall / 1000) * objTypeAdvisory.price;
 
         ///////PATIENT
         // 1: create payment for patient
         // get remain_money patient
-        let objPatient = await User.findById({_id:idPatient}).select('remainMoney');
+        let objPatient = await User.findById({_id: idPatient}).select('remainMoney');
+        console.log(objPatient);
         let newRemainMoneyPatient = objPatient.remainMoney - amount;
         let objPaymentForPatient = {
             userID: idPatient,
@@ -324,15 +331,14 @@ module.exports = function (io, streams, app) {
         };
         // create payment history
         // save remain money to user
-        objPatient.set({remainMoney:newRemainMoneyPatient});
+        objPatient.set({remainMoney: newRemainMoneyPatient});
         let objPatientReturn = await objPatient.save();
         let objPaymentPatientReturn;
-        if(objPatientReturn){
+        if (objPatientReturn) {
             objPaymentPatientReturn = await PaymentController.createPaymentForUser(objPaymentForPatient);
-            if(objPaymentPatientReturn){
+            if (objPaymentPatientReturn) {
                 // send notification, save notification
                 // create notification
-                let fullNameDoctor = await getUser(idDoctor);
                 let objNotificationPatient = {
                     senderId: idDoctor,
                     nameSender: fullNameDoctor,
@@ -340,27 +346,14 @@ module.exports = function (io, streams, app) {
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                        "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyPatient
+                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyPatient
                 };
                 await NotificationController.createNotification(objNotificationPatient)
 
-                // send notification
-                let notificationToPatient = {
-                    data: {
-                        senderId: idDoctor,
-                        nameSender: fullNameDoctor,
-                        receiveId: idPatient,
-                        type: constants.NOTIFICATION_TYPE_PAYMENT,
-                        storageId: objPaymentPatientReturn.id,
-                        message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                            "Thời gian tư vấn là: "+(timeCall/1000)+". Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyPatient,
-                        createTime: Date.now().toString()
-                    }
-                };
-                await SendNotification.sendNotification(idPatient, notificationToPatient);
+
             }
             /////////// DOCTOR
-            let objDoctor = await User.findById({_id:idDoctor}).select('remainMoney');
+            let objDoctor = await User.findById({_id: idDoctor}).select('remainMoney');
             let newRemainMoneyDoctor = objDoctor.remainMoney - amount;
 
             let objPaymentForDoctor = {
@@ -372,16 +365,16 @@ module.exports = function (io, streams, app) {
                 status: constants.PAYMENT_SUCCESS
             };
             // update remain money to doctor
-            objDoctor.set({remainMoney:newRemainMoneyDoctor});
+            objDoctor.set({remainMoney: newRemainMoneyDoctor});
             let objDoctorReturn = await objDoctor.save();
             // create payment doctor
             let objPaymentDoctorReturn;
-            if(objDoctorReturn){
+            if (objDoctorReturn) {
                 objPaymentDoctorReturn = await PaymentController.createPaymentForUser(objPaymentForDoctor);
-                if(objPaymentDoctorReturn){
+                if (objPaymentDoctorReturn) {
                     // send notification, save notification
                     // create notification
-                    let fullNamePatient = await getUser(idPatient);
+
                     let objNotificationDoctor = {
                         senderId: idPatient,
                         nameSender: fullNamePatient,
@@ -389,24 +382,11 @@ module.exports = function (io, streams, app) {
                         type: constants.NOTIFICATION_TYPE_PAYMENT,
                         storageId: objPaymentDoctorReturn.id,
                         message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                            "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyDoctor
+                            "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyDoctor
                     };
                     await NotificationController.createNotification(objNotificationDoctor)
 
-                    // send notification
-                    let notificationToDoctor = {
-                        data: {
-                            senderId: idPatient,
-                            nameSender: fullNamePatient,
-                            receiveId: idDoctor,
-                            type: constants.NOTIFICATION_TYPE_PAYMENT,
-                            storageId: objPaymentDoctorReturn.id,
-                            message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                                "Thời gian tư vấn là: "+(timeCall/1000)+"s. Bạn đã thanh toán: "+amount+". Số tiền bạn có hiện tại: "+newRemainMoneyDoctor,
-                            createTime: Date.now().toString()
-                        }
-                    };
-                    await SendNotification.sendNotification(idDoctor, notificationToDoctor);
+
                 }
             }
             //// end doctor
@@ -422,15 +402,46 @@ module.exports = function (io, streams, app) {
                 linkVideo: linkVideo
             }
             let objVideoCall = await VideoCall.createVideoCallHistory(objDataVideoCall)
+
+            // send notification
+            let notificationToDoctor = {
+                data: {
+                    senderId: idPatient,
+                    nameSender: fullNamePatient,
+                    receiveId: idDoctor,
+                    type: constants.NOTIFICATION_TYPE_PAYMENT,
+                    storageId: objPaymentDoctorReturn.id,
+                    message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
+                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyDoctor,
+                    createTime: Date.now().toString()
+                }
+            };
+            await SendNotification.sendNotification(idDoctor, notificationToDoctor);
+
+            // send notification
+            let notificationToPatient = {
+                data: {
+                    senderId: idDoctor,
+                    nameSender: fullNameDoctor,
+                    receiveId: idPatient,
+                    type: constants.NOTIFICATION_TYPE_PAYMENT,
+                    storageId: objPaymentPatientReturn.id,
+                    message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
+                        "Thời gian tư vấn là: " + (timeCall / 1000) + ". Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyPatient,
+                    createTime: Date.now().toString()
+                }
+            };
+            await SendNotification.sendNotification(idPatient, notificationToPatient);
         }
-        */
     }
 
     function incomingCallResponse(calleeId, from, callResponse, calleeSdp) {
         clearCandidatesQueue(calleeId);
 
         function onError(callerReason, calleeReason) {
-            if (pipeline && pipeline !== undefined) pipeline.release();
+            if (pipeline && pipeline !== undefined) {
+                pipeline.release();
+            }
             if (caller) {
                 let callerMessage = {
                     id: "callResponse",
@@ -639,6 +650,9 @@ module.exports = function (io, streams, app) {
         client.on("onCallerReject", function (calleeId) {
             onCallerReject(calleeId);
         });
+        client.on("onGetVideoCallType", function (id) {
+            idTypeAdvisory = id;
+        });
 
         function leave() {
             console.log("-- " + client.id + " left --");
@@ -662,11 +676,3 @@ module.exports = function (io, streams, app) {
     }
 };
 
-async function getUser(userId) {
-    let fullName;
-    let objUser = await User.findById({_id: userId});
-    if (objUser) {
-        fullName = " " + objUser.firstName + " " + objUser.middleName + " " + objUser.lastName + "";
-    }
-    return fullName
-}
