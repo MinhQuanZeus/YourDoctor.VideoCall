@@ -8,6 +8,8 @@
   "dependencies": {
     "body-parser": "^1.18.3",
     "cookie-parser": "~1.4.3",
+    "bcrypt": "^2.0.1",
+    "bcrypt-promise": "^2.0.0",
     "debug": "~2.6.9",
     "dotenv": "^6.0.0",
     "ejs": "^2.6.1",
