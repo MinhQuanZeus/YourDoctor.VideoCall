@@ -15,7 +15,7 @@ module.exports = function (io, streams, app) {
     let argv = minimist(process.argv.slice(2), {
         default: {
             as_uri: "https://localhost:6008/",
-            ws_uri: "ws://192.168.35.128:8888/kurento"
+            ws_uri: "ws://127.0.0.1:8888/kurento"
         }
     });
 
