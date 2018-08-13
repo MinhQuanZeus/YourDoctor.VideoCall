@@ -15,7 +15,7 @@ module.exports = function (io, streams, app) {
     let argv = minimist(process.argv.slice(2), {
         default: {
             as_uri: "https://localhost:6008/",
-            ws_uri: "ws://127.0.0.1:8888/kurento"
+            ws_uri: "ws://192.168.35.128:8888/kurento"
         }
     });
 
@@ -45,6 +45,7 @@ module.exports = function (io, streams, app) {
         this.endTime = null;
         this.type = type;
         this.recorderEndpoint = null;
+        this.videoURL = null;
     }
 
     UserSession.prototype.sendMessage = function (event, message) {
@@ -96,8 +97,9 @@ module.exports = function (io, streams, app) {
         callback
     ) {
         let self = this;
+        const videoUrl = "tmp/videos/" + uuidv4() + ".mp4";
         recordParams = {
-            uri: "file:///tmp/" + uuidv4() + ".mp4",
+            uri: "file:///" + videoUrl,
             mediaProfile: 'MP4'
         };
         getKurentoClient(function (error, kurentoClient) {
@@ -189,6 +191,8 @@ module.exports = function (io, streams, app) {
                                                     return callback(error);
                                                 }
                                                 userRegistry.getById(callerId).recorderEndpoint = recorderEndpoint;
+                                                userRegistry.getById(callerId).videoURL = videoUrl;
+                                                userRegistry.getById(calleeId).videoURL = videoUrl;
                                                 recorderEndpoint.record(); //You are alredy invoking recorderEndpoit.record() above.
                                             });
                                         }
@@ -283,8 +287,6 @@ module.exports = function (io, streams, app) {
         //// get Id
         let idPatient;
         let idDoctor;
-        console.log(stopperUser);
-        console.log(stoppedUser);
         if (stopperUser && stopperUser.type === 1) {
             idPatient = stopperUser.userId;
         }
@@ -399,7 +401,7 @@ module.exports = function (io, streams, app) {
                 typeAdvisoryID: objTypeAdvisory.id,
                 paymentPatientID: objPaymentPatientReturn.id,
                 paymentDoctorID: objPaymentDoctorReturn.id,
-                linkVideo: linkVideo
+                linkVideo: stoppedUser.videoURL
             }
             let objVideoCall = await VideoCall.createVideoCallHistory(objDataVideoCall)
 
@@ -432,6 +434,8 @@ module.exports = function (io, streams, app) {
                 }
             };
             await SendNotification.sendNotification(idPatient, notificationToPatient);
+            stoppedUser.videoURL = null;
+            stopperUser.videoURL = null;
         }
     }
 
