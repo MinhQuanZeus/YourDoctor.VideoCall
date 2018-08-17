@@ -314,9 +314,9 @@ module.exports = function (io, streams, app) {
         }
         // tính tiền
         let timeCall = new Date().getTime() - finalStartTime;
-        let objTypeAdvisory = await TypeAdvisory.findById({_id: idTypeAdvisory});
-        let amount = (timeCall / 1000) * objTypeAdvisory.price;
-
+        let objTypeAdvisory = await TypeAdvisory.findById({_id:idTypeAdvisory});
+        let amount = Math.round((timeCall/1000)*objTypeAdvisory.price);
+        let amountDoctor = Math.round(amount * constants.PERCENT_PAY_FOR_DOCTOR);
         ///////PATIENT
         // 1: create payment for patient
         // get remain_money patient
@@ -333,12 +333,12 @@ module.exports = function (io, streams, app) {
         };
         // create payment history
         // save remain money to user
-        objPatient.set({remainMoney: newRemainMoneyPatient});
+        objPatient.set({remainMoney:newRemainMoneyPatient});
         let objPatientReturn = await objPatient.save();
         let objPaymentPatientReturn;
-        if (objPatientReturn) {
+        if(objPatientReturn){
             objPaymentPatientReturn = await PaymentController.createPaymentForUser(objPaymentForPatient);
-            if (objPaymentPatientReturn) {
+            if(objPaymentPatientReturn){
                 // send notification, save notification
                 // create notification
                 let objNotificationPatient = {
@@ -348,7 +348,7 @@ module.exports = function (io, streams, app) {
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyPatient
+                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + "VND. Số tiền bạn có hiện tại: " + newRemainMoneyPatient +"VND."
                 };
                 await NotificationController.createNotification(objNotificationPatient)
 
@@ -356,7 +356,7 @@ module.exports = function (io, streams, app) {
             }
             /////////// DOCTOR
             let objDoctor = await User.findById({_id: idDoctor}).select('remainMoney');
-            let newRemainMoneyDoctor = objDoctor.remainMoney - amount;
+            let newRemainMoneyDoctor = objDoctor.remainMoney + amountDoctor;
 
             let objPaymentForDoctor = {
                 userID: idDoctor,
@@ -384,7 +384,7 @@ module.exports = function (io, streams, app) {
                         type: constants.NOTIFICATION_TYPE_PAYMENT,
                         storageId: objPaymentDoctorReturn.id,
                         message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                            "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyDoctor
+                            "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn được thanh toán: " + amountDoctor + "VND. Số tiền bạn có hiện tại: " + newRemainMoneyDoctor +"VND."
                     };
                     await NotificationController.createNotification(objNotificationDoctor)
 
@@ -413,8 +413,9 @@ module.exports = function (io, streams, app) {
                     receiveId: idDoctor,
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentDoctorReturn.id,
+                    remainMoney: newRemainMoneyDoctor+"",
                     message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyDoctor,
+                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn được thanh toán: " + amountDoctor + "VND. Số tiền bạn có hiện tại: " + Math.round(newRemainMoneyDoctor)+"VND",
                     createTime: Date.now().toString()
                 }
             };
@@ -428,8 +429,9 @@ module.exports = function (io, streams, app) {
                     receiveId: idPatient,
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
+                    remainMoney: newRemainMoneyPatient+"",
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                        "Thời gian tư vấn là: " + (timeCall / 1000) + ". Bạn đã thanh toán: " + amount + ". Số tiền bạn có hiện tại: " + newRemainMoneyPatient,
+                        "Thời gian tư vấn là: " + (timeCall / 1000) + ". Bạn đã thanh toán: " + amount + "VND. Số tiền bạn có hiện tại: " + Math.round(newRemainMoneyPatient)+"VND",
                     createTime: Date.now().toString()
                 }
             };
