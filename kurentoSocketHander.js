@@ -97,9 +97,9 @@ module.exports = function (io, streams, app) {
         callback
     ) {
         let self = this;
-        const videoUrl = "tmp/videos/" + uuidv4() + ".mp4";
+        const videoUrl = uuidv4() + ".mp4";
         recordParams = {
-            uri: "file:///" + videoUrl,
+            uri: "file:///tmp/videos/" + videoUrl,
             mediaProfile: 'MP4'
         };
         getKurentoClient(function (error, kurentoClient) {
