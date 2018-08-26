@@ -314,32 +314,37 @@ module.exports = function (io, streams, app) {
         }
         // tính tiền
         let timeCall = new Date().getTime() - finalStartTime;
+        let timeNotification = timeCall/1000;
         let objTypeAdvisory = await TypeAdvisory.findById({_id:idTypeAdvisory});
         let amount = Math.round((timeCall/1000)*objTypeAdvisory.price);
         let amountDoctor = Math.round(amount * constants.PERCENT_PAY_FOR_DOCTOR);
+        let amountAdmin =  Math.round(amount-amountDoctor);
         ///////PATIENT
-        // 1: create payment for patient
         // get remain_money patient
         let objPatient = await User.findById({_id: idPatient}).select('remainMoney');
-        console.log(objPatient);
-        let newRemainMoneyPatient = objPatient.remainMoney - amount;
-        let objPaymentForPatient = {
-            userID: idPatient,
-            amount: amount,
-            remainMoney: newRemainMoneyPatient,
-            fromUser: idDoctor,
-            typeAdvisoryID: objTypeAdvisory.id,
-            status: constants.PAYMENT_SUCCESS
-        };
-        // create payment history
-        // save remain money to user
+        // new remain for patient
+        let newRemainMoneyPatient = Math.round(objPatient.remainMoney - amount);
+        // set remain money to patient
         objPatient.set({remainMoney:newRemainMoneyPatient});
+        // save remain
         let objPatientReturn = await objPatient.save();
+
         let objPaymentPatientReturn;
+        // check success
         if(objPatientReturn){
+            // create payment history
+            let objPaymentForPatient = {
+                userID: idPatient,
+                amount: amount,
+                remainMoney: newRemainMoneyPatient,
+                fromUser: idDoctor,
+                typeAdvisoryID: objTypeAdvisory.id,
+                status: constants.PAYMENT_SUCCESS
+            };
+            // save payment
             objPaymentPatientReturn = await PaymentController.createPaymentForUser(objPaymentForPatient);
+            // check create payment success
             if(objPaymentPatientReturn){
-                // send notification, save notification
                 // create notification
                 let objNotificationPatient = {
                     senderId: idDoctor,
@@ -348,35 +353,37 @@ module.exports = function (io, streams, app) {
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn đã thanh toán: " + amount + "VND. Số tiền bạn có hiện tại: " + newRemainMoneyPatient +"VND."
+                        "Thời gian tư vấn là: " + timeNotification + "s. Bạn đã thanh toán: " + amount + "VND. Số dư hiện tại: " + newRemainMoneyPatient +"VND."
                 };
+                // save notification
                 await NotificationController.createNotification(objNotificationPatient)
-
-
             }
             /////////// DOCTOR
+            // get remain doctor
             let objDoctor = await User.findById({_id: idDoctor}).select('remainMoney');
-            let newRemainMoneyDoctor = objDoctor.remainMoney + amountDoctor;
-
-            let objPaymentForDoctor = {
-                userID: idDoctor,
-                amount: amount,
-                remainMoney: newRemainMoneyDoctor,
-                fromUser: idPatient,
-                typeAdvisoryID: objTypeAdvisory.id,
-                status: constants.PAYMENT_SUCCESS
-            };
-            // update remain money to doctor
+            // new remain doctor
+            let newRemainMoneyDoctor = Math.round(objDoctor.remainMoney + amountDoctor);
+            // set remain money to doctor
             objDoctor.set({remainMoney: newRemainMoneyDoctor});
+            // save remain doctor
             let objDoctorReturn = await objDoctor.save();
-            // create payment doctor
             let objPaymentDoctorReturn;
+            // check success
             if (objDoctorReturn) {
+                // create payment doctor
+                let objPaymentForDoctor = {
+                    userID: idDoctor,
+                    amount: amount,
+                    remainMoney: newRemainMoneyDoctor,
+                    fromUser: idPatient,
+                    typeAdvisoryID: objTypeAdvisory.id,
+                    status: constants.PAYMENT_SUCCESS
+                };
+                // save payment doctor
                 objPaymentDoctorReturn = await PaymentController.createPaymentForUser(objPaymentForDoctor);
+                // check success payment
                 if (objPaymentDoctorReturn) {
-                    // send notification, save notification
                     // create notification
-
                     let objNotificationDoctor = {
                         senderId: idPatient,
                         nameSender: fullNamePatient,
@@ -384,15 +391,15 @@ module.exports = function (io, streams, app) {
                         type: constants.NOTIFICATION_TYPE_PAYMENT,
                         storageId: objPaymentDoctorReturn.id,
                         message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                            "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn được thanh toán: " + amountDoctor + "VND. Số tiền bạn có hiện tại: " + newRemainMoneyDoctor +"VND."
+                            "Thời gian tư vấn là: " + timeNotification + "s. Bạn được thanh toán: " + amountDoctor + "VND. Số dư hiện tại: " + newRemainMoneyDoctor +"VND."
                     };
-                    await NotificationController.createNotification(objNotificationDoctor)
-
-
+                    // save notification
+                    await NotificationController.createNotification(objNotificationDoctor);
                 }
             }
             //// end doctor
-            /// create video call history
+
+            /// VIDEO CALL HISTORY
             let objDataVideoCall = {
                 patientId: idPatient,
                 doctorId: idDoctor,
@@ -403,9 +410,30 @@ module.exports = function (io, streams, app) {
                 paymentDoctorID: objPaymentDoctorReturn.id,
                 linkVideo: stoppedUser.videoURL
             }
-            let objVideoCall = await VideoCall.createVideoCallHistory(objDataVideoCall)
+            // save video call history
+            let objVideoCall = await VideoCall.createVideoCallHistory(objDataVideoCall);
 
-            // send notification
+            // ADMIN .............
+            // save income
+            User.findOneAndUpdate({ role: constants.ROLE_ADMIN }, { $inc: { remainMoney: amountAdmin } }, {new: true },function(err, resUser) {
+                if(err){
+
+                }
+                if(resUser){
+                    let objPaymentAdmin = ({
+                        userID: resUser.id,
+                        amount: amountAdmin,
+                        remainMoney: resUser.remainMoney,
+                        fromUser: idDoctor,
+                        typeAdvisoryID: objTypeAdvisory.id,
+                        status: constants.PAYMENT_SUCCESS
+                    });
+                    PaymentController.createPaymentForUser(objPaymentAdmin);
+                }
+            });
+
+            /// NOTIFICATION
+            // create notification doctor
             let notificationToDoctor = {
                 data: {
                     senderId: idPatient,
@@ -415,13 +443,14 @@ module.exports = function (io, streams, app) {
                     storageId: objPaymentDoctorReturn.id,
                     remainMoney: newRemainMoneyDoctor+"",
                     message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
-                        "Thời gian tư vấn là: " + (timeCall / 1000) + "s. Bạn được thanh toán: " + amountDoctor + "VND. Số tiền bạn có hiện tại: " + Math.round(newRemainMoneyDoctor)+"VND",
+                        "Thời gian tư vấn là: " + timeNotification + "s. Bạn được thanh toán: " + amountDoctor + "VND. Số dư hiện tại: " + newRemainMoneyDoctor+"VND",
                     createTime: Date.now().toString()
                 }
             };
+            // send notification doctor
             await SendNotification.sendNotification(idDoctor, notificationToDoctor);
 
-            // send notification
+            // create notification patient
             let notificationToPatient = {
                 data: {
                     senderId: idDoctor,
@@ -431,10 +460,11 @@ module.exports = function (io, streams, app) {
                     storageId: objPaymentPatientReturn.id,
                     remainMoney: newRemainMoneyPatient+"",
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
-                        "Thời gian tư vấn là: " + (timeCall / 1000) + ". Bạn đã thanh toán: " + amount + "VND. Số tiền bạn có hiện tại: " + Math.round(newRemainMoneyPatient)+"VND",
+                        "Thời gian tư vấn là: " + timeNotification + ". Bạn đã thanh toán: " + amount + "VND. Số dư hiện tại: " + newRemainMoneyPatient+"VND",
                     createTime: Date.now().toString()
                 }
             };
+            // send notification patient
             await SendNotification.sendNotification(idPatient, notificationToPatient);
             stoppedUser.videoURL = null;
             stopperUser.videoURL = null;
