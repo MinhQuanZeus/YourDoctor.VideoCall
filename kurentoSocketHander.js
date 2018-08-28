@@ -349,7 +349,7 @@ module.exports = function (io, streams, app) {
                 let objNotificationPatient = {
                     senderId: idDoctor,
                     nameSender: fullNameDoctor,
-                    receiveId: idPatient,
+                    receiverId: idPatient,
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
                     message: "Cuộc tư vấn với bác sỹ " + fullNameDoctor + " đã kết thúc. " +
@@ -373,7 +373,7 @@ module.exports = function (io, streams, app) {
                 // create payment doctor
                 let objPaymentForDoctor = {
                     userID: idDoctor,
-                    amount: amount,
+                    amount: amountDoctor,
                     remainMoney: newRemainMoneyDoctor,
                     fromUser: idPatient,
                     typeAdvisoryID: objTypeAdvisory.id,
@@ -387,7 +387,7 @@ module.exports = function (io, streams, app) {
                     let objNotificationDoctor = {
                         senderId: idPatient,
                         nameSender: fullNamePatient,
-                        receiveId: idDoctor,
+                        receiverId: idDoctor,
                         type: constants.NOTIFICATION_TYPE_PAYMENT,
                         storageId: objPaymentDoctorReturn.id,
                         message: "Cuộc tư vấn với bệnh nhân " + fullNamePatient + " đã kết thúc. " +
@@ -438,7 +438,7 @@ module.exports = function (io, streams, app) {
                 data: {
                     senderId: idPatient,
                     nameSender: fullNamePatient,
-                    receiveId: idDoctor,
+                    receiverId: idDoctor,
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentDoctorReturn.id,
                     remainMoney: newRemainMoneyDoctor+"",
@@ -455,7 +455,7 @@ module.exports = function (io, streams, app) {
                 data: {
                     senderId: idDoctor,
                     nameSender: fullNameDoctor,
-                    receiveId: idPatient,
+                    receiverId: idPatient,
                     type: constants.NOTIFICATION_TYPE_PAYMENT,
                     storageId: objPaymentPatientReturn.id,
                     remainMoney: newRemainMoneyPatient+"",
