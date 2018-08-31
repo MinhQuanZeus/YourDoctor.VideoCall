@@ -555,10 +555,10 @@ module.exports = function (io, streams, app) {
             if (callee.peer) {
                 let messageReject = {
                     id: "callResponse",
-                    response: "rejected: ",
+                    response: "rejected",
                     message: 'Bác sĩ đang trong một cuộc trò truyện khác, vui lòng gọi lại sau'
                 };
-                caller.sendMessage("callResponse", messageReject);
+                return caller.sendMessage("callResponse", messageReject);
             }
             caller.sdpOffer = sdpOffer;
             callee.peer = from;
@@ -577,7 +577,7 @@ module.exports = function (io, streams, app) {
         }
         let message = {
             id: "callResponse",
-            response: "rejected: ",
+            response: "rejected",
             message: rejectCause
         };
         caller.sendMessage("callResponse", message);
