@@ -552,6 +552,14 @@ module.exports = function (io, streams, app) {
         let rejectCause = "User " + to + " is not registered";
         if (userRegistry.getByUserId(to)) {
             let callee = userRegistry.getByUserId(to);
+            if (callee.peer) {
+                let messageReject = {
+                    id: "callResponse",
+                    response: "rejected: ",
+                    message: 'Bác sĩ đang trong một cuộc trò truyện khác, vui lòng gọi lại sau'
+                };
+                caller.sendMessage("callResponse", messageReject);
+            }
             caller.sdpOffer = sdpOffer;
             callee.peer = from;
             caller.peer = to;
