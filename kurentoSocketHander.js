@@ -537,6 +537,9 @@ module.exports = function (io, streams, app) {
                 });
             });
         } else {
+            if (callee) {
+                callee.peer = null;
+            }
             let decline = {
                 id: "callResponse",
                 response: "rejected",
@@ -711,6 +714,7 @@ module.exports = function (io, streams, app) {
     function onCallerReject(calleeId) {
         const callee = userRegistry.getByUserId(calleeId);
         if (callee) {
+            callee.peer = null;
             callee.sendMessage("onCallerReject", "caller reject");
         }
     }
